@@ -1,1 +1,1 @@
-# monitoring-stack-in-kubernetes
+# Настройка мониторинга в кластере Kubernetes:
