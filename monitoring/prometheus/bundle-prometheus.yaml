@@ -56,20 +56,20 @@ subjects:
 - kind: ServiceAccount
   name: prometheus-account
   namespace: monitoring
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: pvc-prometeus
-  namespace: monitoring
-  labels:
-    app: prometheus-server
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
+# ---
+# kind: PersistentVolumeClaim
+# apiVersion: v1
+# metadata:
+#   name: pvc-prometeus
+#   namespace: monitoring
+#   labels:
+#     app: prometheus-server
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 5Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -105,11 +105,17 @@ spec:
           - '--config.file=/etc/prometheus/prometheus.yml'
         resources:
           requests:
-            cpu: "0.1"
-            memory: "100Mi"        
+            cpu: "0.2"
+            memory: "200Mi"        
           limits:
             cpu: "0.5"
             memory: "500Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 15
+          periodSeconds: 30
         volumeMounts:
           - name: prometheus-config
             mountPath: /etc/prometheus/
@@ -121,8 +127,10 @@ spec:
             defaultMode: 420
             name: prometheus-configmap
         - name: prometheus-storage
-          persistentVolumeClaim:
-            claimName: pvc-prometeus
+          emptyDir: {}
+        # - name: prometheus-storage
+        #   persistentVolumeClaim:
+        #     claimName: pvc-prometeus
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
