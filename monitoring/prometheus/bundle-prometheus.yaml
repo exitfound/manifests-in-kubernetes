@@ -56,20 +56,20 @@ subjects:
 - kind: ServiceAccount
   name: prometheus-account
   namespace: monitoring
-# ---
-# kind: PersistentVolumeClaim
-# apiVersion: v1
-# metadata:
-#   name: pvc-prometeus
-#   namespace: monitoring
-#   labels:
-#     app: prometheus-server
-# spec:
-#   accessModes:
-#     - ReadWriteOnce
-#   resources:
-#     requests:
-#       storage: 5Gi
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc-prometeus
+  namespace: monitoring
+  labels:
+    app: prometheus-server
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -116,6 +116,12 @@ spec:
             port: 9090
           initialDelaySeconds: 15
           periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 15
+          periodSeconds: 30
         volumeMounts:
           - name: prometheus-config
             mountPath: /etc/prometheus/
@@ -127,10 +133,8 @@ spec:
             defaultMode: 420
             name: prometheus-configmap
         - name: prometheus-storage
-          emptyDir: {}
-        # - name: prometheus-storage
-        #   persistentVolumeClaim:
-        #     claimName: pvc-prometeus
+          persistentVolumeClaim:
+            claimName: pvc-prometeus
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -175,6 +179,10 @@ data:
     - job_name: 'prometheus'
       static_configs:
       - targets: ['prometheus-service.monitoring.svc.cluster.local:9090']
+
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['kube-state-metrics.monitoring.svc.cluster.local:8080']
 
     - job_name: "kubernetes-nodes"
       scheme: https
