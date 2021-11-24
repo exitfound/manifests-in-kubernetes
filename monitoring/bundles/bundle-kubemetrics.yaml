@@ -180,8 +180,8 @@ spec:
           httpGet:
             path: /
             port: 8081
-          initialDelaySeconds: 5
-          timeoutSeconds: 5
+          initialDelaySeconds: 15
+          timeoutSeconds: 30
         securityContext:
           runAsUser: 65534
       serviceAccountName: kube-state-metrics
