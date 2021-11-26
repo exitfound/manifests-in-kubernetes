@@ -33,6 +33,18 @@ spec:
           - name: node-exporter
             protocol: TCP
             containerPort: 9100
+          livenessProbe:
+            httpGet:
+              path: "/metrics"
+              port: 9100
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: "/metrics"
+              port: 9100
+            initialDelaySeconds: 15
+            periodSeconds: 30
           volumeMounts:
           - name: sys
             mountPath: /host/sys
@@ -47,3 +59,7 @@ spec:
         - name: root
           hostPath:
             path: /
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
