@@ -216,7 +216,28 @@ data:
         replacement: kubernetes.default.svc:443
       - source_labels: [__meta_kubernetes_node_name]
         regex: (.+)
-        target_label: __metrics_path__
         replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+        target_label: __metrics_path__
 
-        
+    - job_name: 'node-exporter'
+      kubernetes_sd_configs: 
+      - role: node
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        action: replace
+        regex: (.+)
+        replacement: $1:9100
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_node_address_(.+)
+
+
+
+
+      # - job_name: 'node-exporter'
+      #   kubernetes_sd_configs:
+      #     - role: endpoints
+      #   relabel_configs:
+      #   - source_labels: [__meta_kubernetes_endpoints_name]
+      #     regex: 'node-exporter'
+      #     action: keep
