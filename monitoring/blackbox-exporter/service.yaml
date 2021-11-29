@@ -1,0 +1,17 @@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  namespace: monitoring
+  name: blackbox-service
+  labels:
+    app: blackbox
+spec:
+  type: ClusterIP
+  selector:
+    app: blackbox
+  ports:
+    - name: blackbox
+      protocol: TCP
+      port: 9115
+      targetPort: 9115
