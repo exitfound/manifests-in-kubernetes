@@ -1,0 +1,80 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+  namespace: monitoring
+  labels:
+    app: prometheus-server
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: prometheus-server
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/service: "prometheus"
+        prometheus.io/port: "9090"
+    spec:
+      containers:
+      - name: prometheus-server
+        imagePullPolicy: IfNotPresent
+        image: prom/prometheus
+        ports:
+          - name: prometheus-web
+            protocol: TCP
+            containerPort: 9090
+        args:
+          - '--storage.tsdb.retention=24h'
+          - '--storage.tsdb.path=/prometheus'
+          - '--config.file=/etc/prometheus/prometheus.yml'
+        resources:
+          requests:
+            cpu: "0.2"
+            memory: "200Mi"        
+          limits:
+            cpu: "0.5"
+            memory: "500Mi"
+        livenessProbe:
+          tcpSocket:
+            port: 9090
+          successThreshold: 1
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          successThreshold: 1
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        volumeMounts:
+          - name: prometheus-config
+            mountPath: /etc/prometheus/
+          - name: prometheus-storage
+            mountPath: /prometheus/
+      volumes:
+        - name: prometheus-config
+          configMap:
+            defaultMode: 420
+            name: prometheus-configmap
+        - name: prometheus-storage
+          persistentVolumeClaim:
+            claimName: pvc-prometeus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      restartPolicy: Always
+      serviceAccountName: prometheus-account
