@@ -9,8 +9,6 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: monitoring
-  labels:
-    app: prometheus-server
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -35,6 +33,7 @@ rules:
   - nodes/metrics
   - configmaps
   - services
+  - deployments
   - endpoints
   - pods
   verbs: ["get", "list", "watch"]
@@ -80,6 +79,11 @@ metadata:
     app: prometheus-server
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: prometheus-server
@@ -88,16 +92,17 @@ spec:
       labels:
         app: prometheus-server
       annotations:
-        prometheus.io/author: "exitfound"
         prometheus.io/scrape: "true"
         prometheus.io/service: "prometheus"
         prometheus.io/port: "9090"
     spec:
       containers:
       - name: prometheus-server
+        imagePullPolicy: IfNotPresent
         image: prom/prometheus
         ports:
           - name: prometheus-web
+            protocol: TCP
             containerPort: 9090
         args:
           - '--storage.tsdb.retention=24h'
@@ -111,15 +116,18 @@ spec:
             cpu: "0.5"
             memory: "500Mi"
         livenessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 9090
+          successThreshold: 1
+          failureThreshold: 3
           initialDelaySeconds: 15
           periodSeconds: 30
         readinessProbe:
           httpGet:
             path: /
             port: 9090
+          successThreshold: 1
+          failureThreshold: 3
           initialDelaySeconds: 15
           periodSeconds: 30
         volumeMounts:
@@ -139,6 +147,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         fsGroup: 65534
+      restartPolicy: Always
       serviceAccountName: prometheus-account
 ---
 apiVersion: v1
@@ -149,7 +158,6 @@ metadata:
   labels:
     app: prometheus-server
   annotations:
-    prometheus.io/author: "exitfound"
     prometheus.io/scrape: "true"
     prometheus.io/service: "prometheus"
     prometheus.io/port: "9090"
@@ -159,6 +167,7 @@ spec:
   type: ClusterIP
   ports:
   - name: prometheus-web
+    protocol: TCP
     port: 9090
     targetPort: 9090
 ---
@@ -178,59 +187,11 @@ data:
     scrape_configs:
     - job_name: 'prometheus'
       static_configs:
-      - targets: ['prometheus-service.monitoring.svc.cluster.local:9090']
+        - targets: ['prometheus-service.monitoring.svc.cluster.local:9090']
 
     - job_name: 'kube-state-metrics'
       static_configs:
-      - targets: ['kube-state-metrics.monitoring.svc.cluster.local:8080']
-
-    - job_name: "kubernetes-apiservers"
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      authorization:
-        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      kubernetes_sd_configs:
-        - role: endpoints
-      relabel_configs:
-        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
-          action: keep
-          regex: default;kubernetes;https
-
-    - job_name: "kubernetes-nodes"
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      authorization:
-        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      kubernetes_sd_configs:
-        - role: node
-      relabel_configs:
-        - action: labelmap
-          regex: __meta_kubernetes_node_label_(.+)
-        - target_label: __address__
-          replacement: kubernetes.default.svc:443
-        - source_labels: [__meta_kubernetes_node_name]
-          regex: (.+)
-          target_label: __metrics_path__
-          replacement: /api/v1/nodes/${1}/proxy/metrics
-
-    - job_name: 'kubernetes-cadvisor'
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      kubernetes_sd_configs:
-        - role: node
-      relabel_configs:
-        - action: labelmap
-          regex: __meta_kubernetes_node_label_(.+)
-        - target_label: __address__
-          replacement: kubernetes.default.svc:443
-        - source_labels: [__meta_kubernetes_node_name]
-          regex: (.+)
-          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
-          target_label: __metrics_path__
+        - targets: ['kube-state-metrics.monitoring.svc.cluster.local:8080']
 
     - job_name: 'node-exporter'
       kubernetes_sd_configs: 
@@ -262,3 +223,51 @@ data:
           target_label: instance
         - target_label: __address__
           replacement: blackbox-service:9115
+
+    - job_name: "kubernetes-nodes"
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      authorization:
+        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kubernetes_sd_configs:
+        - role: node
+      relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+
+    - job_name: "kubernetes-apiservers"
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      authorization:
+        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kubernetes_sd_configs:
+        - role: endpoints
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+    - job_name: 'kubernetes-cadvisor'
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kubernetes_sd_configs:
+        - role: node
+      relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+          target_label: __metrics_path__
